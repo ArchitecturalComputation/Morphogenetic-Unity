@@ -113,7 +113,7 @@ abstract class Drawing : MonoBehaviour
         Height = height;
         _is3D = is3D;
 
-        _reset = Matrix4x4.TRS(
+        _reset.SetTRS(
                     new Vector3(0, height, 0),
                     Quaternion.Euler(180, 0, 0),
                     Vector3.one);
@@ -301,11 +301,13 @@ abstract class Drawing : MonoBehaviour
     {
         if (!_drawStroke) return;
 
-        var translate = Matrix4x4.Translate(new Vector2(x, y));
-        var scale = Matrix4x4.Scale(Vector2.one * _strokeWeight);
-        Matrix4x4 input;
-        Multiply(ref translate, ref scale, out input);
-        DrawMultiply(ref input);
+        _input.SetTRS(
+              new Vector2(x, y),
+              Quaternion.identity,
+              new Vector2(_strokeWeight, _strokeWeight)
+              );
+
+        DrawMultiply(ref _input);
 
         Graphics.DrawMesh(_circle, _draw, _strokeMaterial, 0, null, 0);
     }
@@ -318,26 +320,26 @@ abstract class Drawing : MonoBehaviour
         var end = new Vector2(x2, y2);
         var vector = end - start;
 
-        var input = Matrix4x4.TRS(
-                        start + vector * 0.5f,
-                        Quaternion.LookRotation(Vector3.forward, vector),
-                        new Vector2(_strokeWeight, vector.magnitude)
-                        );
+        _input.SetTRS(
+               start + vector * 0.5f,
+               Quaternion.LookRotation(Vector3.forward, vector),
+               new Vector2(_strokeWeight, vector.magnitude)
+               );
 
-        DrawMultiply(ref input);
+        DrawMultiply(ref _input);
 
         Graphics.DrawMesh(_quad, _draw, _strokeMaterial, 0, null, 0);
     }
 
     public static void Rect(float x, float y, float w, float h)
     {
-        var input = Matrix4x4.TRS(
-                       new Vector2(x, y),
-                       Quaternion.identity,
-                       new Vector2(w, h)
-                       );
+        _input.SetTRS(
+               new Vector2(x, y),
+               Quaternion.identity,
+               new Vector2(w, h)
+               );
 
-        DrawMultiply(ref input);
+        DrawMultiply(ref _input);
 
         if (_drawFill)
         {
@@ -353,12 +355,13 @@ abstract class Drawing : MonoBehaviour
 
     public static void Ellipse(float x, float y, float w, float h)
     {
-        var translate = Matrix4x4.Translate(new Vector2(x, y));
-        var scale = Matrix4x4.Scale(new Vector3(w, h, 0));
-        Matrix4x4 input;
+        _input.SetTRS(
+               new Vector2(x, y),
+               Quaternion.identity,
+               new Vector2(w, h)
+               );
 
-        Multiply(ref translate, ref scale, out input);
-        DrawMultiply(ref input);
+        DrawMultiply(ref _input);
 
         if (_drawFill)
         {
@@ -374,9 +377,13 @@ abstract class Drawing : MonoBehaviour
 
     public static void Box(float w, float h, float d)
     {
-        var input = Matrix4x4.Scale(new Vector3(w, h, d));
-        DrawMultiply(ref input);
+        _input.SetTRS(
+               Vector3.zero,
+               Quaternion.identity,
+               new Vector3(w, h, d)
+               );
 
+        DrawMultiply(ref _input);
         Graphics.DrawMesh(_box, _draw, _fillMaterial, 0, null, 0);
     }
 
@@ -387,62 +394,88 @@ abstract class Drawing : MonoBehaviour
 
     public static void Sphere(float r)
     {
-        var input = Matrix4x4.Scale(Vector3.one * r);
-        DrawMultiply(ref input);
+        _input.SetTRS(
+               Vector3.zero,
+               Quaternion.identity,
+               new Vector3(r, r, r)
+               );
 
+        DrawMultiply(ref _input);
         Graphics.DrawMesh(_sphere, _draw, _fillMaterial, 0);
     }
+
+    static int[] _trisFaces = new[] { 0, 1, 2, 5, 4, 3 };
+    static int[] _quadsFaces = new[] { 0, 1, 2, 3, 7, 6, 5, 4 };
+    static Vector3[] _tris = new Vector3[6];
+    static Vector3[] _quads = new Vector3[8];
 
     public static void Shape(params Vector3[] v)
     {
         int size = v.Length;
-        Array.Resize(ref v, size * 2);
-        Array.Copy(v, 0, v, size, size);
+
+        if (size != 3 && size != 4)
+            throw new ArgumentException(" Shape should have 3 or 4 vertices.");
 
         Mesh mesh;
 
         if (_meshPoolIndex > _meshPool.Count - 1)
         {
-            mesh = new Mesh()
-            {
-                vertices = v
-            };
-
+            mesh = new Mesh();
+            mesh.MarkDynamic();
             _meshPool.Add(mesh);
         }
         else
         {
             mesh = _meshPool[_meshPoolIndex++];
-            mesh.vertices = v;
         }
 
-        if (size == 3)
+        bool isTri = size == 3;
+        bool updateFaces = mesh.vertexCount != size * 2;
+
+        var arr = isTri ? _tris : _quads;
+
+        for (int i = 0; i < size; i++)
+        {
+            arr[i] = v[i];
+            arr[size + i] = v[i];
+        }
+
+        mesh.vertices = arr;
+
+        if (isTri)
         {
             var n = Vector3.Cross(v[1] - v[0], v[2] - v[0]).normalized;
-            mesh.normals = new[] { n, n, n, -n, -n, -n };
-            mesh.triangles = new[] { 0, 1, 2, 5, 4, 3 };
-        }
-        else if (size == 4)
-        {
-            var n = new Vector3[8];
 
+            for (int i = 0; i < 3; i++)
+            {
+                arr[i] = n;
+                arr[i + 3] = -n;
+            }
+        }
+        else
+        {
             for (int i = 0; i < 4; i++)
             {
                 int prev = i == 0 ? 3 : i - 1;
                 int next = i == 3 ? 0 : i + 1;
-                n[i] = Vector3.Cross(v[next] - v[i], v[prev] - v[i]).normalized;
-                n[i + 4] = -n[i];
+                var n = Vector3.Cross(v[next] - v[i], v[prev] - v[i]).normalized;
+                arr[i] = n;
+                arr[i + 4] = -n;
             }
-
-            mesh.normals = n;
-            mesh.SetIndices(new[] { 0, 1, 2, 3, 7, 6, 5, 4 }, MeshTopology.Quads, 0);
         }
-        else
+
+        mesh.normals = arr;
+
+        if (updateFaces)
         {
-            throw new ArgumentException(" Shape should have 3 or 4 vertices.");
+            mesh.SetIndices(
+                isTri ? _trisFaces : _quadsFaces,
+                isTri ? MeshTopology.Triangles : MeshTopology.Quads,
+                0,
+                true
+                );
         }
 
-        mesh.RecalculateBounds();
         Graphics.DrawMesh(mesh, _matrix, _fillMaterial, 0);
     }
 
@@ -461,9 +494,8 @@ abstract class Drawing : MonoBehaviour
         Multiply(ref matrix);
     }
 
-    static void Translate(float x, float y, float z, ref Matrix4x4 matrix)
+    public static void Translate(Vector3 v, ref Matrix4x4 matrix)
     {
-        var v = new Vector3(x, y, z);
         v = matrix.MultiplyPoint3x4(v);
         matrix.m03 = v.x;
         matrix.m13 = v.y;
@@ -472,24 +504,33 @@ abstract class Drawing : MonoBehaviour
 
     public static void Translate(float x, float y, float z = 0)
     {
-        Translate(x, y, z, ref _matrix);
+        Translate(new Vector3(x, y, z), ref _matrix);
+    }
+
+    static Matrix4x4 _input = Matrix4x4.identity;
+
+    public static void Rotate(Quaternion q, ref Matrix4x4 matrix)
+    {
+        _input.SetTRS(Vector3.zero, q, Vector3.one);
+
+        Matrix4x4 result;
+        Multiply(ref matrix, ref _input, out result);
+        matrix = result;
     }
 
     static void Rotate(float a, float b, float c)
     {
-        var v = new Vector3(a, b, c) * Rad2Deg;
-        var rotate = Matrix4x4.Rotate(Quaternion.Euler(v));
-        Multiply(ref rotate);
+        Rotate(Quaternion.Euler(a, b, c), ref _matrix);
     }
 
-    public static void Rotate(float r) => Rotate(0, 0, r);
-    public static void RotateX(float r) => Rotate(r, 0, 0);
-    public static void RotateY(float r) => Rotate(0, r, 0);
+    public static void Rotate(float r) => Rotate(0, 0, r * Rad2Deg);
+    public static void RotateX(float r) => Rotate(r * Rad2Deg, 0, 0);
+    public static void RotateY(float r) => Rotate(0, r * Rad2Deg, 0);
 
     public static void Scale(float x, float y, float z)
     {
-        var scale = Matrix4x4.Scale(new Vector3(x, y, z));
-        Multiply(ref scale);
+        _input.SetTRS(Vector3.zero, Quaternion.identity, new Vector3(x, y, z));
+        Multiply(ref _input);
     }
 
     public static void Scale(float s) => Scale(s, s, s);
@@ -507,8 +548,8 @@ abstract class Drawing : MonoBehaviour
 
         if (!_is3D)
         {
-            _draw.m23 -= _z;
-            _z += 0.01f;
+            _draw.m23 = _z;
+            _z -= 0.01f;
         }
     }
 

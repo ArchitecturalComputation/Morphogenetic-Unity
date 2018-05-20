@@ -70,20 +70,24 @@ namespace Swarms
                     Matrix4x4 mat_i;
                     //  mat_i = inverse * flock[i].matrix;
                     Multiply(ref inverse, ref flock[i].matrix, out mat_i);
-                    Vector3 p_i = Pos(ref mat_i);
+                    Vector3 p_i; Pos(out p_i, ref mat_i);
 
                     float separation = p_i.sqrMagnitude;
                     if (separation < _maxSeparation)
                     {
-                        Vector3 d_i = Dir(ref mat_i);
+                        Vector3 d_i; Dir(out d_i, ref mat_i);
+
                         if (d_i.z > -0.25f)
                         {
-                            neighbourcentre += p_i;
-                            neighbourdir += d_i;
+                            // neighbourcentre += p_i;
+                            Add(ref neighbourcentre, ref p_i);
+                            //neighbourdir += d_i;
+                            Add(ref neighbourdir, ref d_i);
                             cohere = true;
                             if (separation < 10)
                             {
-                                kernelcentre += p_i;
+                                //kernelcentre += p_i;
+                                Add(ref kernelcentre, ref p_i);
                                 separate = true;
                             }
                         }
@@ -95,7 +99,7 @@ namespace Swarms
             {
                 float angle = 180 / 12f;
                 if (kernelcentre.x > 0) angle = -180 / 12f;
-                matrix *= Matrix4x4.Rotate(Quaternion.AngleAxis(angle, Vector3.up));
+                Rotate(Quaternion.AngleAxis(angle, Vector3.up), ref matrix);
             }
             else if (cohere)
             {
@@ -108,22 +112,29 @@ namespace Swarms
                 float ang = Acos(desiredir.z);
                 if (ang > 0.01f)
                 {
-                    matrix *= Matrix4x4.Rotate(Quaternion.AngleAxis((ang * 0.1f) *
-                       (180 / PI), new Vector3(-desiredir.y, desiredir.x, 0.0f)));
-                  }
+                    var q = Quaternion.AngleAxis(ang * (0.1f * Rad2Deg), new Vector3(-desiredir.y, desiredir.x, 0.0f));
+                    Rotate(q, ref matrix);
+                }
             }
 
-            matrix *= Matrix4x4.Translate(new Vector3(0, 0, speed));
+            Translate(new Vector3(0, 0, speed), ref matrix);
         }
 
-        Vector3 Pos(ref Matrix4x4 matrix)
+        void Pos(out Vector3 pos, ref Matrix4x4 matrix)
         {
-            return new Vector3(matrix.m03, matrix.m13, matrix.m23);
+            pos.x = matrix.m03; pos.y = matrix.m13; pos.z = matrix.m23;
         }
 
-        Vector3 Dir(ref Matrix4x4 matrix)
+        void Dir(out Vector3 dir, ref Matrix4x4 matrix)
         {
-            return new Vector3(matrix.m02, matrix.m12, matrix.m22);
+            dir.x = matrix.m02; dir.y = matrix.m12; dir.z = matrix.m22;
+        }
+
+        void Add(ref Vector3 a, ref Vector3 b)
+        {
+            a.x += b.x;
+            a.y += b.y;
+            a.z += b.z;
         }
     }
 }

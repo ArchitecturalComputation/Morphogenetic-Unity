@@ -36,6 +36,8 @@ namespace Trees
             Rule();
         }
 
+        Matrix4x4 _m = Matrix4x4.identity;
+
         void Rule()
         {
             // rule: grow offshoot branches
@@ -44,19 +46,30 @@ namespace Trees
             {
                 // main stem -- almost straight
                 child_a = new Branch();
-                child_a.joint *= Matrix4x4.Rotate(Quaternion.Euler(
-                    Random.Range(-180 / 16f, 180 / 16f),
-                    Random.Range(0, 180f),
-                    0));
+
+
+             var q = Quaternion.Euler(
+                     Random.Range(-180 / 16f, 180 / 16f),
+                     Random.Range(0, 180f),
+                      0);
+
+                _m.SetTRS(Vector3.zero, q, Vector3.one);
+                 child_a.joint *= _m;
+  
+
             }
             if (child_b == null)
             {
                 // branching off
                 child_b = new Branch();
-                child_a.joint *= Matrix4x4.Rotate(Quaternion.Euler(
-                    Random.Range(-180 / 4f, 180 / 4f),
-                    Random.Range(0, 180f),
-                    0));
+
+                var q = Quaternion.Euler(
+                     Random.Range(-180 / 4f, 180 / 4f),
+                     Random.Range(0, 180f),
+                     0);
+
+                _m.SetTRS(Vector3.zero, q, Vector3.one);
+                child_b.joint *= _m;
             }
         }
 
