@@ -27,7 +27,7 @@ abstract class Drawing : MonoBehaviour
     static Mesh _sphere;
     static ColorModes _colorMode;
     static float _maxColorValue;
-    public static GameObject _light;
+    static GameObject _light;
     static Dictionary<Color, Material> _fillMaterials;
     static Dictionary<Color, Material> _strokeMaterials;
     static GUIStyle _style;
@@ -97,6 +97,7 @@ abstract class Drawing : MonoBehaviour
     public void Size(int width, int height, bool is3D = false)
     {
         ViewSize(width, height, is3D);
+        Application.targetFrameRate = 60;
 
         var collider = gameObject.GetComponent<BoxCollider2D>();
 
